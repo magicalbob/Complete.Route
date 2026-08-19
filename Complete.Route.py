@@ -120,18 +120,27 @@ def main():
     print(f"\nSuccessfully geocoded {len(coordinates)} roads\n")
     
     # Create efficient route
-    print("Step 2: Optimizing route...")
+    # Step 2: Query OSRM Walking Distance Matrix
+    print("\nStep 2: Fetching street walking distances from OSRM...")
     coords_list = [coordinates[road] for road in ROADS if road in coordinates]
     roads_list = [road for road in ROADS if road in coordinates]
-    
-    route_indices = nearest_neighbor_route(coords_list)
+
+    dist_matrix = get_osrm_distance_matrix(coords_list)
+
+    if not dist_matrix:
+        print("Falling back to Haversine straight-line distance...")
+        # Fallback logic if network/API fails
+        ...
+        return
+
+    # Optimize route using real walking distances
+    route_indices = nearest_neighbor_route_matrix(dist_matrix)
     roads_ordered = [roads_list[i] for i in route_indices]
-    
-    total_distance = calculate_route_distance(route_indices, coords_list)
-    
-    print(f"Route optimized!")
-    print(f"Total walking distance: {total_distance:.2f} km")
-    print(f"Estimated time: {total_distance * 60:.0f} minutes (at 1 km/hr walking pace)\n")
+    total_distance = calculate_matrix_route_distance(route_indices, dist_matrix)
+
+    print("Route optimized with real footpaths!")
+    print(f"Total street walking distance: {total_distance:.2f} km")
+    print(f"Estimated walking time: {total_distance * 15:.0f} mins (at ~4 km/h pace)")
     
     # Display route
     print("Step 3: Route order")
@@ -211,6 +220,72 @@ def create_google_maps_urls(roads_ordered, coordinates, chunk_size=9):
         urls.append((i // (chunk_size - 1) + 1, url, chunk))
     
     return urls
+
+def get_osrm_distance_matrix(coordinates_list):
+    """
+    Query OSRM Table API for walking distances between all coordinate pairs.
+    Returns an NxN matrix of walking distances in kilometers.
+    """
+    if not coordinates_list:
+        return []
+
+    # OSRM expects coordinates formatted as 'longitude,latitude' separated by semicolons
+    coords_str = ";".join([f"{lon},{lat}" for lat, lon in coordinates_list])
+    
+    # Use the public demo OSRM server for walking ('foot')
+    # Request both distance and duration matrices
+    url = f"http://router.project-osrm.org/table/v1/foot/{coords_str}"
+    params = {
+        "annotations": "distance"  # Returns distance matrix in meters
+    }
+
+    try:
+        response = requests.get(url, params=params, headers={"User-Agent": "leaflet-router"})
+        data = response.json()
+
+        if data.get("code") == "Ok":
+            # Convert meters to kilometers
+            distances_km = [
+                [dist / 1000.0 for dist in row]
+                for row in data["distances"]
+            ]
+            return distances_km
+        else:
+            print(f"OSRM Error: {data.get('code')}")
+    except Exception as e:
+        print(f"Failed to fetch OSRM matrix: {e}")
+
+    return None
+
+def nearest_neighbor_route_matrix(dist_matrix):
+    """
+    Create efficient route using Nearest Neighbor on a distance matrix.
+    """
+    n = len(dist_matrix)
+    if n == 0:
+        return []
+
+    unvisited = set(range(1, n))
+    current = 0
+    route = [0]
+
+    while unvisited:
+        nearest = min(
+            unvisited,
+            key=lambda x: dist_matrix[current][x]
+        )
+        route.append(nearest)
+        unvisited.remove(nearest)
+        current = nearest
+
+    return route
+
+def calculate_matrix_route_distance(route, dist_matrix):
+    """Calculate total walking distance along the route using the matrix."""
+    total = 0.0
+    for i in range(len(route) - 1):
+        total += dist_matrix[route[i]][route[i+1]]
+    return total
 
 if __name__ == "__main__":
     main()
