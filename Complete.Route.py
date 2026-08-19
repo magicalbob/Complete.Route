@@ -141,7 +141,8 @@ def main():
     
     # Create Google Maps links (split into chunks)
     print("\nStep 4: Exporting to Google Maps...")
-    maps_urls = create_google_maps_urls(roads_ordered, chunk_size=10)
+    # Pass 'coordinates' along with 'roads_ordered'
+    maps_urls = create_google_maps_urls(roads_ordered, coordinates, chunk_size=9)
     
     if maps_urls:
         print(f"\n✓ Created {len(maps_urls)} route segments!")
@@ -170,6 +171,46 @@ def main():
             print(f"    {url}\n")
     else:
         print("Could not create Google Maps URLs")
+
+def create_google_maps_urls(roads_ordered, coordinates, chunk_size=9):
+    """
+    Create functional Google Maps URLs using exact lat/lng coordinates.
+    Google Maps accepts up to 10 stops per route (1 origin + 8 waypoints + 1 destination).
+    """
+    if len(roads_ordered) < 2:
+        return []
+    
+    urls = []
+    # Using chunk_size of 9 so total stops (origin + waypoints + dest) stays <= 10
+    for i in range(0, len(roads_ordered) - 1, chunk_size - 1):
+        chunk = roads_ordered[i:i + chunk_size]
+        if len(chunk) < 2:
+            continue
+            
+        origin_lat, origin_lng = coordinates[chunk[0]]
+        dest_lat, dest_lng = coordinates[chunk[-1]]
+        
+        origin = f"{origin_lat},{origin_lng}"
+        destination = f"{dest_lat},{dest_lng}"
+        
+        # Intermediate waypoints
+        waypoint_coords = [f"{coordinates[r][0]},{coordinates[r][1]}" for r in chunk[1:-1]]
+        waypoints_str = "|".join(waypoint_coords)
+        
+        # Build query using Google's modern Dir API parameters
+        params = {
+            "api": "1",
+            "origin": origin,
+            "destination": destination,
+            "travelmode": "walking"
+        }
+        if waypoints_str:
+            params["waypoints"] = waypoints_str
+            
+        url = f"https://www.google.com/maps/dir/?{urllib.parse.urlencode(params)}"
+        urls.append((i // (chunk_size - 1) + 1, url, chunk))
+    
+    return urls
 
 if __name__ == "__main__":
     main()
