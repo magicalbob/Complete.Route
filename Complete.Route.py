@@ -79,23 +79,6 @@ def calculate_route_distance(route, coordinates):
         total += haversine_distance(curr[0], curr[1], next_pt[0], next_pt[1])
     return total
 
-def create_google_maps_urls(roads_ordered, chunk_size=10):
-    """Create multiple Google Maps URLs with waypoint chunks."""
-    if len(roads_ordered) < 2:
-        return []
-    
-    urls = []
-    for i in range(0, len(roads_ordered), chunk_size):
-        chunk = roads_ordered[i:i+chunk_size]
-        waypoints = "+to:".join([
-            urllib.parse.quote(f"{road}, {LOCATION}")
-            for road in chunk
-        ])
-        url = f"https://www.google.com/maps/dir/{waypoints}"
-        urls.append((i//chunk_size + 1, url, chunk))
-    
-    return urls
-
 def main():
     print("🗺️  Leafletting Route Optimizer")
     print("=" * 50)
