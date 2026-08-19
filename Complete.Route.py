@@ -12,78 +12,18 @@ import urllib.parse
 
 # Your roads to leaflet
 ROADS = [
-    "Appleby Road",
-    "Ardmore Road",
-    "Armadale Road",
-    "Banbury Avenue",
-    "Bexley Avenue",
-    "Bibbys Road",
-    "Blackfen Place",
-    "Bluebell Close",
-    "Bracken Way",
-    "Bromley Close",
-    "Canada Crescent",
-    "Chelsea Avenue",
-    "Chestnut Close",
-    "Collins Avenue",
-    "Corrib Road",
-    "Cotswold Road",
-    "Courtfield Avenue",
-    "Danson Gardens",
-    "Devonshire Road",
-    "Dudley Avenue",
-    "Edmonton Place",
-    "Galway Avenue",
-    "Goodwood Avenue",
-    "Gresley Place",
-    "Hayfield Avenue",
-    "Headfort Close",
-    "Hetherington Place",
-    "Hilstone Lane",
-    "Holcombe Road",
-    "Hughes Grove",
-    "Hurstwood Drive",
-    "Inver Road",
-    "Jersey Avenue",
-    "Kylemore Avenue",
-    "Langdon Way",
-    "Leys Road",
-    "Lime Grove",
-    "Limerick Road",
-    "Lorne Road",
-    "Maurice Grove",
-    "Maxwell Grove",
-    "Meadow Close",
-    "Mexford Avenue",
-    "Moor Park Avenue",
-    "Morston Avenue",
-    "Normandie Avenue",
-    "Pearl Avenue",
-    "Penhill Close",
-    "Quebec Avenue",
-    "Rathmore Gardens",
-    "Raymond Avenue",
-    "Regency Gardens",
-    "Sidney Avenue",
-    "St Michael's Road",
-    "Stopford Avenue",
-    "Summerwood Close",
-    "Teesdale Avenue",
-    "Toronto Avenue",
-    "Tower View",
-    "Tyrone Avenue",
-    "Valentia Road",
-    "Warbreck Hill Road",
-    "Warley Road",
-    "Waterside"
+"PR4 3UA", "PR4 3UD", "PR4 3UP", "PR4 3UW",
+"PR4 3YB", "PR4 3YF", "PR4 3YH",
+"PR4 3ZB", "PR4 3ZD", "PR4 3ZG", "PR4 3ZR",
+"PR4 3EY", "PR4 3GP"
 ]
 
-BLACKPOOL = "Blackpool, UK"
+LOCATION = "Elswick, Lancashire"
 
 def geocode_address(address):
     """Convert address to lat/lng using OpenStreetMap Nominatim."""
     try:
-        query = f"{address}, {BLACKPOOL}"
+        query = f"{address}, {LOCATION}"
         response = requests.get(
             "https://nominatim.openstreetmap.org/search",
             params={"q": query, "format": "json"},
@@ -139,18 +79,22 @@ def calculate_route_distance(route, coordinates):
         total += haversine_distance(curr[0], curr[1], next_pt[0], next_pt[1])
     return total
 
-def create_google_maps_url(roads_ordered):
-    """Create a Google Maps URL with all waypoints."""
+def create_google_maps_urls(roads_ordered, chunk_size=10):
+    """Create multiple Google Maps URLs with waypoint chunks."""
     if len(roads_ordered) < 2:
-        return None
+        return []
     
-    waypoints = "+to:".join([
-        urllib.parse.quote(f"{road}, Blackpool, UK")
-        for road in roads_ordered
-    ])
+    urls = []
+    for i in range(0, len(roads_ordered), chunk_size):
+        chunk = roads_ordered[i:i+chunk_size]
+        waypoints = "+to:".join([
+            urllib.parse.quote(f"{road}, {LOCATION}")
+            for road in chunk
+        ])
+        url = f"https://www.google.com/maps/dir/{waypoints}"
+        urls.append((i//chunk_size + 1, url, chunk))
     
-    url = f"https://www.google.com/maps/dir/{waypoints}"
-    return url
+    return urls
 
 def main():
     print("🗺️  Leafletting Route Optimizer")
@@ -195,16 +139,16 @@ def main():
     for i, road in enumerate(roads_ordered, 1):
         print(f"{i:2d}. {road}")
     
-    # Create Google Maps link
+    # Create Google Maps links (split into chunks)
     print("\nStep 4: Exporting to Google Maps...")
-    maps_url = create_google_maps_url(roads_ordered)
+    maps_urls = create_google_maps_urls(roads_ordered, chunk_size=10)
     
-    if maps_url:
-        print("\n✓ Google Maps URL created!")
-        print("\nOpening in browser...\n")
-        webbrowser.open(maps_url)
+    if maps_urls:
+        print(f"\n✓ Created {len(maps_urls)} route segments!")
+        print("Opening first segment in browser...\n")
+        webbrowser.open(maps_urls[0][1])
         
-        # Also save the URL
+        # Save all routes and URLs
         with open("leaflet_route.txt", "w") as f:
             f.write("Leafletting Route\n")
             f.write("=" * 50 + "\n\n")
@@ -213,11 +157,19 @@ def main():
             f.write("Route order:\n")
             for i, road in enumerate(roads_ordered, 1):
                 f.write(f"{i}. {road}\n")
-            f.write(f"\n\nGoogle Maps URL:\n{maps_url}\n")
+            f.write(f"\n\nGoogle Maps Route Segments\n")
+            f.write("=" * 50 + "\n\n")
+            for segment_num, url, roads in maps_urls:
+                f.write(f"Segment {segment_num}:\n")
+                f.write(f"{url}\n\n")
         
-        print("Route saved to 'leaflet_route.txt'")
+        print(f"Route saved to 'leaflet_route.txt'")
+        print(f"\nYou have {len(maps_urls)} segments:")
+        for segment_num, url, roads in maps_urls:
+            print(f"  Segment {segment_num}: {roads[0]} to {roads[-1]}")
+            print(f"    {url}\n")
     else:
-        print("Could not create Google Maps URL")
+        print("Could not create Google Maps URLs")
 
 if __name__ == "__main__":
     main()
