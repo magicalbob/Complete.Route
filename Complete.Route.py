@@ -4,11 +4,19 @@ Leafletting Route Optimizer
 Constructs an efficient walking route through all roads in a ward.
 """
 
+import configparser
+import os
 import requests
 import json
 from itertools import permutations
 import webbrowser
 import urllib.parse
+
+# Load API key from setup.conf
+_config = configparser.ConfigParser()
+_config_path = os.path.join(os.path.dirname(__file__), "setup.conf")
+_config.read(_config_path)
+OPENROUTESERVICE_API = _config.get("openrouteservice", "OPENROUTESERVICE_API", fallback="")
 
 # Your roads to leaflet
 ROADS = [
@@ -223,37 +231,39 @@ def create_google_maps_urls(roads_ordered, coordinates, chunk_size=9):
 
 def get_osrm_distance_matrix(coordinates_list):
     """
-    Query OSRM Table API for walking distances between all coordinate pairs.
-    Returns an NxN matrix of walking distances in kilometers.
+    Query OpenRouteService Matrix API for walking distances between all coordinate pairs.
+    Returns an NxN matrix of walking distances in kilometres.
     """
     if not coordinates_list:
         return []
 
-    # OSRM expects coordinates formatted as 'longitude,latitude' separated by semicolons
-    coords_str = ";".join([f"{lon},{lat}" for lat, lon in coordinates_list])
-    
-    # Use the public demo OSRM server for walking ('foot')
-    # Request both distance and duration matrices
-    url = f"http://router.project-osrm.org/table/v1/foot/{coords_str}"
-    params = {
-        "annotations": "distance"  # Returns distance matrix in meters
+    if not OPENROUTESERVICE_API:
+        print("Error: OPENROUTESERVICE_API key not set in setup.conf")
+        return None
+
+    # ORS expects [longitude, latitude] pairs
+    locations = [[lon, lat] for lat, lon in coordinates_list]
+
+    url = "https://api.openrouteservice.org/v2/matrix/foot-walking"
+    headers = {
+        "Authorization": OPENROUTESERVICE_API,
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "locations": locations,
+        "metrics": ["distance"],
+        "units": "km"
     }
 
     try:
-        response = requests.get(url, params=params, headers={"User-Agent": "leaflet-router"})
-        data = response.json()
-
-        if data.get("code") == "Ok":
-            # Convert meters to kilometers
-            distances_km = [
-                [dist / 1000.0 for dist in row]
-                for row in data["distances"]
-            ]
-            return distances_km
+        response = requests.post(url, json=payload, headers=headers)
+        if response.status_code == 200:
+            data = response.json()
+            return data["distances"]
         else:
-            print(f"OSRM Error: {data.get('code')}")
+            print(f"OpenRouteService Error {response.status_code}: {response.text}")
     except Exception as e:
-        print(f"Failed to fetch OSRM matrix: {e}")
+        print(f"Failed to fetch ORS matrix: {e}")
 
     return None
 
